@@ -1,0 +1,5 @@
+Flask==2.x.x
+pandas==x.x.x
+nltk==x.x.x
+fuzzywuzzy==x.x.x
+python-Levenshtein==x.x.x
