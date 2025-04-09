@@ -1,3 +1,4 @@
+from flask import Flask, render_template, request
 import pandas as pd
 import nltk
 from nltk.tokenize import word_tokenize
@@ -5,75 +6,60 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from fuzzywuzzy import fuzz, process
 
-# Load the processed data
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('averaged_perceptron_tagger')
+
+app = Flask(__name__)
+
+# Initialize lemmatizer and stopwords
+lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words('english'))
+
+def preprocess_text(text):
+    tokens = word_tokenize(text.lower())
+    tokens = [token for token in tokens if token not in stop_words]
+    pos_tags = nltk.pos_tag(tokens)
+    lemmatized = [lemmatizer.lemmatize(word, pos=get_wordnet_pos(tag)) for word, tag in pos_tags]
+    return '-'.join(lemmatized)
+
+def get_wordnet_pos(tag):
+    tag = tag[0].upper()
+    tag_dict = {"J": nltk.corpus.reader.wordnet.ADJ,
+                "N": nltk.corpus.reader.wordnet.NOUN,
+                "V": nltk.corpus.reader.wordnet.VERB,
+                "R": nltk.corpus.reader.wordnet.ADV}
+    return tag_dict.get(tag, nltk.corpus.reader.wordnet.NOUN)
+
+# Load processed data
 processed_df = pd.read_csv('processed_questions_answers.csv')
 
-# Initialize variables to maintain context
-context = {}
-conversation_history = []
-
-def handle_question(user_question):
-    global context, conversation_history
-    
-    # Preprocess the question
-    processed_user_question = preprocess_text(user_question)
-    
-    # Check for exact match
-    matching_row = processed_df[processed_df['Processed_Question'] == processed_user_question]
-    
-    if not matching_row.empty:
-        # Exact match found
-        answer = matching_row.iloc[0]['Answer']
-        print("Answer:", answer)
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        user_question = request.form['question']
+        processed_user_question = preprocess_text(user_question)
         
-        # Update context and conversation history
-        context['last_question'] = user_question
-        context['last_answer'] = answer
-        conversation_history.append((user_question, answer))
+        # Check for exact match
+        matching_row = processed_df[processed_df['Processed_Question'] == processed_user_question]
         
-    else:
-        # Use fuzzy matching if no exact match
-        choices = processed_df['Processed_Question'].tolist()
-        best_match = process.extractOne(processed_user_question, choices, scorer=fuzz.token_sort_ratio)
-        
-        if best_match and best_match[1] > 60:  # Adjust the threshold as needed
-            best_match_index = choices.index(best_match[0])
-            answer = processed_df.iloc[best_match_index]['Answer']
-            print(f"Best match: {best_match[0]}")
-            print("Answer:", answer)
-            
-            # Update context and conversation history
-            context['last_question'] = user_question
-            context['last_answer'] = answer
-            conversation_history.append((user_question, answer))
+        if not matching_row.empty:
+            answer = matching_row.iloc[0]['Answer']
         else:
-            print("I'm sorry, I don't have an answer to that question.")
+            choices = processed_df['Processed_Question'].tolist()
+            best_match = process.extractOne(processed_user_question, choices, scorer=fuzz.token_sort_ratio)
             
-            # Update context and conversation history
-            context['last_question'] = user_question
-            context['last_answer'] = "No answer found"
-            conversation_history.append((user_question, "No answer found"))
-
-def display_context():
-    global context, conversation_history
-    print("\nConversation Context:")
-    print("Last Question:", context.get('last_question', "None"))
-    print("Last Answer:", context.get('last_answer', "None"))
-    print("Conversation History:")
-    for i, (question, answer) in enumerate(conversation_history):
-        print(f"{i+1}. Question: {question}, Answer: {answer}")
-
-while True:
-    # Step 1: Ask the User a Question
-    user_question = input("Please enter your question (or type 'exit' to quit, 'context' to view conversation context): ")
+            if best_match and best_match[1] > 60:
+                best_match_index = choices.index(best_match[0])
+                answer = processed_df.iloc[best_match_index]['Answer']
+            else:
+                answer = "I'm sorry, I don't have an answer to that question."
+        
+        return render_template('index.html', question=user_question, answer=answer)
     
-    if user_question.lower() == 'exit':
-        break
-    elif user_question.lower() == 'context':
-        display_context()
-    else:
-        handle_question(user_question)
-    
-    print()  # Empty line for readability
+    return render_template('index.html')
 
-print("Thank you for using the chatbot!")
+if __name__ == '__main__':
+    app.run(debug=True)
+
