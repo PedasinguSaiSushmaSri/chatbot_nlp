@@ -1,0 +1,53 @@
+import pandas as pd
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+import string
+
+# Download necessary NLTK data
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('averaged_perceptron_tagger')
+
+# Module-1: Data Preparation and Processing
+
+# Step 1: Read the CSV File
+df = pd.read_csv('questions_answers.csv', header=None, names=['Question', 'Answer'])
+
+# Initialize lemmatizer and stopwords
+lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words('english'))
+
+def preprocess_text(text):
+    # Step 2: Apply Word Tokenization
+    tokens = word_tokenize(text.lower())
+    
+    # Step 3: Remove Stopwords
+    tokens = [token for token in tokens if token not in stop_words and token not in string.punctuation]
+    
+    # Step 4: Apply Lemmatization with POS Tagging
+    pos_tags = nltk.pos_tag(tokens)
+    lemmatized = [lemmatizer.lemmatize(word, pos=get_wordnet_pos(tag)) for word, tag in pos_tags]
+    
+    # Step 5: Combine Words with a Hyphen
+    return '-'.join(lemmatized)
+
+def get_wordnet_pos(tag):
+    tag = tag[0].upper()
+    tag_dict = {"J": nltk.corpus.reader.wordnet.ADJ,
+                "N": nltk.corpus.reader.wordnet.NOUN,
+                "V": nltk.corpus.reader.wordnet.VERB,
+                "R": nltk.corpus.reader.wordnet.ADV}
+    return tag_dict.get(tag, nltk.corpus.reader.wordnet.NOUN)
+
+# Apply preprocessing to questions
+df['Processed_Question'] = df['Question'].apply(preprocess_text)
+
+# Step 6: Map Respective Answers (already done by keeping the DataFrame structure)
+
+# Step 7: Store Results in Output CSV File
+df[['Processed_Question', 'Answer']].to_csv('processed_questions_answers.csv', index=False)
+
+print("Data processing complete. Output saved to 'processed_questions_answers.csv'")
